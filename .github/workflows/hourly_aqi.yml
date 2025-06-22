@@ -2,7 +2,7 @@ name: Collect AQI Hourly
 
 on:
   schedule:
-    - cron: "0 * * * *"  # ⏰ Every hour (UTC)
+    - cron: "0 * * * *"  # Every hour (UTC)
   workflow_dispatch:
 
 jobs:
@@ -21,16 +21,18 @@ jobs:
     - name: 📦 Install Dependencies
       run: pip install requests pandas
 
-    - name: 🏃 Run AQI Script (with keys)
+    - name: 🏃 Run AQI Script
       env:
         AQICN_API_KEY: 2eb7e59a27fec6826892da8d9b3f9ff95e6c573e
         OPENWEATHER_API_KEY: ee88310481e99a7843bdedc0cca27fd1
-      run: python main.py
+      run: python collect_aqi.py
 
-    - name: 📤 Upload data CSV as artifact
-      uses: actions/upload-artifact@v3
-      with:
-        name: karachi-aqi-data
-        path: data/
+    - name: 📤 Commit and Push CSV
+      run: |
+        git config user.name "github-actions[bot]"
+        git config user.email "github-actions[bot]@users.noreply.github.com"
+        git add data/*.csv
+        git commit -m "🗂️ Update AQI data: $(date +'%Y-%m-%d %H:%M:%S')" || echo "No changes to commit"
+        git push
 
 
