@@ -2,8 +2,8 @@ name: Collect AQI Hourly
 
 on:
   schedule:
-    - cron: "0 * * * *"  # Every hour (UTC)
-  workflow_dispatch:  # Allow manual trigger
+    - cron: "0 * * * *"  # ⏰ Every hour (UTC)
+  workflow_dispatch:
 
 jobs:
   run-hourly:
@@ -21,16 +21,16 @@ jobs:
     - name: 📦 Install Dependencies
       run: pip install requests pandas
 
-    - name: 🏃 Run AQI Collection Script
+    - name: 🏃 Run AQI Script (with keys)
       env:
-        AQICN_API_KEY: ${{ secrets.AQICN_API_KEY }}
-        OPENWEATHER_API_KEY: ${{ secrets.OPENWEATHER_API_KEY }}
-      run: |
-        python collect_aqi.py
+        AQICN_API_KEY: 2eb7e59a27fec6826892da8d9b3f9ff95e6c573e
+        OPENWEATHER_API_KEY: ee88310481e99a7843bdedc0cca27fd1
+      run: python main.py
 
-    - name: 📤 Upload CSV as Artifact
+    - name: 📤 Upload data CSV as artifact
       uses: actions/upload-artifact@v3
       with:
         name: karachi-aqi-data
         path: data/
+
 
