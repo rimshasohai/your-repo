@@ -1,0 +1,28 @@
+name: Collect AQI Hourly
+
+on:
+  schedule:
+    - cron: "0 * * * *"  # Every hour on the hour (UTC)
+  workflow_dispatch:
+
+jobs:
+  run-hourly:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v3
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: "3.10"
+
+    - name: Install Dependencies
+      run: pip install requests pandas
+
+    - name: Run AQI Hourly Script
+      env:
+        AQICN_API_KEY: ${{ secrets.AQICN_API_KEY }}
+        OPENWEATHER_API_KEY: ${{ secrets.OPENWEATHER_API_KEY }}
+      run: python collect_aqi.py
