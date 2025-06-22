@@ -1,0 +1,118 @@
+name: Hourly AQI Data Logger (Unsafe for Public)
+
+on:
+  schedule:
+    - cron: '0 * * * *'
+  workflow_dispatch:
+
+jobs:
+  fetch-and-log:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Install dependencies
+        run: pip install pandas requests
+
+      - name: Run Embedded AQI Logger
+        env:
+          AQICN_TOKEN: 2eb7e59a27fec6826892da8d9b3f9ff95e6c573e
+          OPENWEATHER_KEY: ee88310481e99a7843bdedc0cca27fd1
+        run: |
+          import os
+          import requests
+          import pandas as pd
+          import datetime
+
+          AQICN_TOKEN = os.getenv("AQICN_TOKEN", "")
+          OPENWEATHER_KEY = os.getenv("OPENWEATHER_KEY", "")
+          CITY = "karachi"
+          COUNTRY = "PK"
+
+          def get_aqi_and_pollutants():
+              try:
+                  url = f"https://api.waqi.info/feed/{CITY}/?token={AQICN_TOKEN}"
+                  r = requests.get(url)
+                  r.raise_for_status()
+                  data = r.json()
+                  if data.get("status") != "ok":
+                      return None
+                  iaqi = data["data"].get("iaqi", {})
+                  return {
+                      "aqi": data["data"].get("aqi"),
+                      "pm25": iaqi.get("pm25", {}).get("v"),
+                      "pm10": iaqi.get("pm10", {}).get("v"),
+                      "co": iaqi.get("co", {}).get("v"),
+                      "no2": iaqi.get("no2", {}).get("v"),
+                      "o3": iaqi.get("o3", {}).get("v"),
+                      "so2": iaqi.get("so2", {}).get("v")
+                  }
+              except Exception as e:
+                  print("AQI Error:", e)
+                  return None
+
+          def get_weather():
+              try:
+                  url = f"http://api.openweathermap.org/data/2.5/weather?q={CITY},{COUNTRY}&appid={OPENWEATHER_KEY}&units=metric"
+                  r = requests.get(url)
+                  r.raise_for_status()
+                  data = r.json()
+                  if "main" not in data or "wind" not in data:
+                      return None
+                  return {
+                      "temp": data["main"].get("temp"),
+                      "humidity": data["main"].get("humidity"),
+                      "pressure": data["main"].get("pressure"),
+                      "wind_speed": data["wind"].get("speed")
+                  }
+              except Exception as e:
+                  print("Weather Error:", e)
+                  return None
+
+          def collect_one_hour():
+              now = datetime.datetime.now()
+              date_str = now.strftime("%Y-%m-%d")
+              time_str = now.strftime("%H:%M:%S")
+              folder_path = f"data/{date_str}"
+              os.makedirs(folder_path, exist_ok=True)
+              csv_path = f"{folder_path}/karachi.csv"
+
+              aqi = get_aqi_and_pollutants()
+              weather = get_weather()
+
+              if aqi is None or weather is None:
+                  print("❌ Data not available")
+                  return
+
+              row = {
+                  "date": date_str,
+                  "time": time_str,
+                  **aqi,
+                  **weather
+              }
+
+              df = pd.DataFrame([row])
+
+              if os.path.exists(csv_path):
+                  df.to_csv(csv_path, mode='a', header=False, index=False)
+              else:
+                  df.to_csv(csv_path, index=False)
+
+              print(f"✅ Logged at {time_str}")
+
+          collect_one_hour()
+
+      - name: Commit and Push Results
+        run: |
+          git config --global user.name "github-actions"
+          git config --global user.email "actions@github.com"
+          git add data/
+          git commit -m "📊 Hourly update $(date -u)" || echo "No changes"
+          git push
