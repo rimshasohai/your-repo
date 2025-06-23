@@ -114,5 +114,5 @@ jobs:
           git config --global user.name "github-actions"
           git config --global user.email "actions@github.com"
           git add data/
-          git commit -m "📊 Hourly update $(date -u)" || echo "No changes"
+          git commit -m "📊 Hourly update without python file $(date -u)" || echo "No changes"
           git push
