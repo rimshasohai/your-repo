@@ -106,7 +106,7 @@ jobs:
               else:
                   df.to_csv(csv_path, index=False)
 
-              print(f"✅ Logged at {time_str}")
+              
 
           if __name__ == "__main__":
               collect_one_hour()
