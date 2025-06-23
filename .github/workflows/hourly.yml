@@ -1,8 +1,8 @@
-name: Hourly AQI Logger 
+name: Hourly AQI Logger
 
 on:
   schedule:
-    - cron: '0 * * * *'  # Every hour (UTC)
+    - cron: '0 * * * *'  # Every hour at 00 min UTC
   workflow_dispatch:
 
 jobs:
@@ -10,10 +10,10 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: ✅ Checkout Code
+      - name: ✅ Checkout Repo
         uses: actions/checkout@v4
 
-      - name: 🐍 Setup Python 3.10
+      - name: 🐍 Set Up Python 3.10
         uses: actions/setup-python@v4
         with:
           python-version: '3.10'
@@ -21,101 +21,95 @@ jobs:
       - name: 📦 Install Required Libraries
         run: pip install pandas requests
 
-      - name: 🚀 Run AQI Logging Script
+      - name: 🚀 Run Inline AQI Logging Script
         run: |
-          mkdir -p data
-          echo "import requests
-import pandas as pd
-import datetime
-import os
+          python - <<EOF
+          import os
+          import requests
+          import pandas as pd
+          from datetime import datetime
 
-AQICN_TOKEN = '2eb7e59a27fec6826892da8d9b3f9ff95e6c573e'
-OPENWEATHER_KEY = 'ee88310481e99a7843bdedc0cca27fd1'
+          # ✅ Embedded API Keys (⚠️ safe only for private repos)
+          AQICN_TOKEN = '2eb7e59a27fec6826892da8d9b3f9ff95e6c573e'
+          OPENWEATHER_KEY = 'ee88310481e99a7843bdedc0cca27fd1'
+          CITY = 'karachi'
+          COUNTRY = 'PK'
 
-CITY = 'karachi'
-COUNTRY = 'PK'
+          def get_aqi():
+              try:
+                  url = f'https://api.waqi.info/feed/{CITY}/?token={AQICN_TOKEN}'
+                  res = requests.get(url).json()
+                  if res.get("status") != "ok":
+                      return {}
+                  iaqi = res["data"].get("iaqi", {})
+                  return {
+                      "aqi": res["data"].get("aqi"),
+                      "pm25": iaqi.get("pm25", {}).get("v"),
+                      "pm10": iaqi.get("pm10", {}).get("v"),
+                      "co": iaqi.get("co", {}).get("v"),
+                      "no2": iaqi.get("no2", {}).get("v"),
+                      "o3": iaqi.get("o3", {}).get("v"),
+                      "so2": iaqi.get("so2", {}).get("v")
+                  }
+              except Exception as e:
+                  print("AQI Error:", e)
+                  return {}
 
-def get_aqi_and_pollutants():
-    try:
-        url = f'https://api.waqi.info/feed/{CITY}/?token={AQICN_TOKEN}'
-        r = requests.get(url)
-        r.raise_for_status()
-        data = r.json()
-        if data.get('status') != 'ok':
-            return None
-        iaqi = data['data'].get('iaqi', {})
-        return {
-            'aqi': data['data'].get('aqi'),
-            'pm25': iaqi.get('pm25', {}).get('v'),
-            'pm10': iaqi.get('pm10', {}).get('v'),
-            'co': iaqi.get('co', {}).get('v'),
-            'no2': iaqi.get('no2', {}).get('v'),
-            'o3': iaqi.get('o3', {}).get('v'),
-            'so2': iaqi.get('so2', {}).get('v')
-        }
-    except Exception as e:
-        print('AQI Error:', e)
-        return None
+          def get_weather():
+              try:
+                  url = f'http://api.openweathermap.org/data/2.5/weather?q={CITY},{COUNTRY}&appid={OPENWEATHER_KEY}&units=metric'
+                  res = requests.get(url).json()
+                  return {
+                      "temp": res["main"].get("temp"),
+                      "humidity": res["main"].get("humidity"),
+                      "pressure": res["main"].get("pressure"),
+                      "wind_speed": res["wind"].get("speed")
+                  }
+              except Exception as e:
+                  print("Weather Error:", e)
+                  return {}
 
-def get_weather():
-    try:
-        url = f'http://api.openweathermap.org/data/2.5/weather?q={CITY},{COUNTRY}&appid={OPENWEATHER_KEY}&units=metric'
-        r = requests.get(url)
-        r.raise_for_status()
-        data = r.json()
-        return {
-            'temp': data['main'].get('temp'),
-            'humidity': data['main'].get('humidity'),
-            'pressure': data['main'].get('pressure'),
-            'wind_speed': data['wind'].get('speed')
-        }
-    except Exception as e:
-        print('Weather Error:', e)
-        return None
+          def log_data():
+              now = datetime.utcnow()
+              date_str = now.strftime("%Y-%m-%d")
+              time_str = now.strftime("%H:%M:%S")
+              hour = now.hour + 1  # 1-24 format
 
-def collect_one_hour():
-    now = datetime.datetime.now()
-    date_str = now.strftime('%Y-%m-%d')
-    time_str = now.strftime('%H:%M:%S')
-    hour = now.hour + 1  # Convert to 1–24
+              folder = f"data/{date_str}"
+              os.makedirs(folder, exist_ok=True)
+              filepath = f"{folder}/karachi.csv"
 
-    folder_path = f'data/{date_str}'
-    os.makedirs(folder_path, exist_ok=True)
-    csv_path = os.path.join(folder_path, 'karachi.csv')
+              aqi = get_aqi()
+              weather = get_weather()
 
-    aqi = get_aqi_and_pollutants()
-    weather = get_weather()
+              if not aqi or not weather:
+                  print("❌ Failed to fetch data.")
+                  return
 
-    if aqi is None or weather is None:
-        print('❌ Data not available')
-        return
+              row = {
+                  "date": date_str,
+                  "time": time_str,
+                  "hour": hour,
+                  **aqi,
+                  **weather
+              }
 
-    row = {
-        'date': date_str,
-        'time': time_str,
-        'hour': hour,
-        **aqi,
-        **weather
-    }
+              df = pd.DataFrame([row])
+              if os.path.exists(filepath):
+                  df.to_csv(filepath, mode='a', index=False, header=False)
+              else:
+                  df.to_csv(filepath, index=False)
 
-    df = pd.DataFrame([row])
+              print(f"✅ Logged data for hour {hour} → {filepath}")
 
-    if os.path.exists(csv_path):
-        df.to_csv(csv_path, mode='a', header=False, index=False)
-    else:
-        df.to_csv(csv_path, index=False)
+          log_data()
+          EOF
 
-    print(f'✅ Logged hour {hour}:00 → {csv_path}')
-
-if __name__ == '__main__':
-    collect_one_hour()" > collect_aqi.py
-
-          python collect_aqi.py
-
-      - name: 💾 Commit and Push Updated Data
+      - name: 💾 Commit and Push
         run: |
           git config --global user.name "github-actions"
           git config --global user.email "actions@github.com"
           git add data/
-          git commit -m "📊 Hourly AQI update - $(date -u)" || echo "No changes to commit"
+          git commit -m "📊 Hourly AQI update - $(date -u)" || echo "No changes"
           git push
+
