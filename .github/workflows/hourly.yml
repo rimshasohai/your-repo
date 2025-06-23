@@ -24,13 +24,14 @@ jobs:
       - name: Run AQI Logger
         run: python collect_aqi.py
         env:
-          AQICN_TOKEN: 2eb7e59a27fec6826892da8d9b3f9ff95e6c573e
-          OPENWEATHER_KEY: ee88310481e99a7843bdedc0cca27fd1
+          AQICN_TOKEN: ${{ secrets.AQICN_TOKEN }}
+          OPENWEATHER_KEY: ${{ secrets.OPENWEATHER_KEY }}
 
       - name: Commit and Push Results
         run: |
           git config --global user.name "github-actions"
           git config --global user.email "actions@github.com"
           git add data/
-          git commit -m "📊 Hourly update $(date -u)"
-          git push
+          git commit -m "📊 Hourly update $(date -u)" || echo "No changes to commit"
+          git push https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }} HEAD:${{ github.ref }}
+
