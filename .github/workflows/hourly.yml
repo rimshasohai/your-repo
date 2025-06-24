@@ -24,98 +24,129 @@ jobs:
       - name: 🚀 Run Inline AQI Logger Script
         run: |
           python - <<EOF
-          import requests
-          import pandas as pd
-          import datetime
-          import os
+import requests
+import pandas as pd
+import datetime
+import os
 
-          AQICN_TOKEN = "2eb7e59a27fec6826892da8d9b3f9ff95e6c573e"
-          OPENWEATHER_KEY = "ee88310481e99a7843bdedc0cca27fd1"
+OPENWEATHER_KEY = "ee88310481e99a7843bdedc0cca27fd1"
+CITY = "Karachi"
+COUNTRY = "PK"
+LAT = 24.8607
+LON = 67.0011
 
-          CITY = "karachi"
-          COUNTRY = "PK"
+def get_pollutants():
+    try:
+        url = f"http://api.openweathermap.org/data/2.5/air_pollution?lat={LAT}&lon={LON}&appid={OPENWEATHER_KEY}"
+        r = requests.get(url)
+        r.raise_for_status()
+        data = r.json()
+        components = data["list"][0]["components"]
+        aqi_index = data["list"][0]["main"]["aqi"]
+        return {
+            "aqi_index": aqi_index,
+            "pm2_5": components.get("pm2_5"),
+            "pm10": components.get("pm10"),
+            "co": components.get("co"),
+            "no2": components.get("no2"),
+            "o3": components.get("o3"),
+            "so2": components.get("so2"),
+            "nh3": components.get("nh3")
+        }
+    except Exception as e:
+        print("Pollutants Error:", e)
+        return None
 
-          def get_aqi_and_pollutants():
-              try:
-                  url = f"https://api.waqi.info/feed/{CITY}/?token={AQICN_TOKEN}"
-                  r = requests.get(url)
-                  r.raise_for_status()
-                  data = r.json()
-                  if data.get("status") != "ok":
-                      return None
-                  iaqi = data["data"].get("iaqi", {})
-                  return {
-                      "aqi": data["data"].get("aqi"),
-                      "pm25": iaqi.get("pm25", {}).get("v"),
-                      "pm10": iaqi.get("pm10", {}).get("v"),
-                      "co": iaqi.get("co", {}).get("v"),
-                      "no2": iaqi.get("no2", {}).get("v"),
-                      "o3": iaqi.get("o3", {}).get("v"),
-                      "so2": iaqi.get("so2", {}).get("v")
-                  }
-              except Exception as e:
-                  print("AQI Error:", e)
-                  return None
+def get_weather():
+    try:
+        url = f"http://api.openweathermap.org/data/2.5/weather?q={CITY},{COUNTRY}&appid={OPENWEATHER_KEY}&units=metric"
+        r = requests.get(url)
+        r.raise_for_status()
+        data = r.json()
+        return {
+            "temp": data["main"].get("temp"),
+            "humidity": data["main"].get("humidity"),
+            "pressure": data["main"].get("pressure"),
+            "wind_speed": data["wind"].get("speed")
+        }
+    except Exception as e:
+        print("Weather Error:", e)
+        return None
 
-          def get_weather():
-              try:
-                  url = f"http://api.openweathermap.org/data/2.5/weather?q={CITY},{COUNTRY}&appid={OPENWEATHER_KEY}&units=metric"
-                  r = requests.get(url)
-                  r.raise_for_status()
-                  data = r.json()
-                  if "main" not in data or "wind" not in data:
-                      return None
-                  return {
-                      "temp": data["main"].get("temp"),
-                      "humidity": data["main"].get("humidity"),
-                      "pressure": data["main"].get("pressure"),
-                      "wind_speed": data["wind"].get("speed")
-                  }
-              except Exception as e:
-                  print("Weather Error:", e)
-                  return None
+def get_forecast():
+    try:
+        url = f"http://api.openweathermap.org/data/2.5/forecast?lat={LAT}&lon={LON}&appid={OPENWEATHER_KEY}&units=metric"
+        r = requests.get(url)
+        r.raise_for_status()
+        data = r.json()
+        forecasts = data.get("list", [])
+        rows = []
+        for entry in forecasts[:24]:  # next 24 × 3-hour forecasts = 3 days
+            dt = datetime.datetime.utcfromtimestamp(entry["dt"])
+            rows.append({
+                "datetime": dt.isoformat(),
+                "temp": entry["main"]["temp"],
+                "humidity": entry["main"]["humidity"],
+                "pressure": entry["main"]["pressure"],
+                "wind_speed": entry["wind"]["speed"]
+            })
+        return pd.DataFrame(rows)
+    except Exception as e:
+        print("Forecast Error:", e)
+        return pd.DataFrame()
 
-          def collect_one_hour():
-              now = datetime.datetime.utcnow()
-              date_str = now.strftime("%Y-%m-%d")
-              time_str = now.strftime("%H:%M:%S")
-              hour = now.hour + 1  # 1-24 format
-              folder_path = f"data/{date_str}"
-              os.makedirs(folder_path, exist_ok=True)
-              csv_path = f"{folder_path}/karachi.csv"
+def collect_one_hour():
+    now = datetime.datetime.utcnow()
+    date_str = now.strftime("%Y-%m-%d")
+    time_str = now.strftime("%H:%M:%S")
+    hour_of_day = now.hour
+    day_of_week = now.weekday()
+    is_weekend = 1 if day_of_week >= 5 else 0
 
-              aqi = get_aqi_and_pollutants()
-              weather = get_weather()
+    folder_path = f"data/{date_str}"
+    os.makedirs(folder_path, exist_ok=True)
+    csv_path = f"{folder_path}/karachi.csv"
+    forecast_path = f"{folder_path}/forecast.csv"
 
-              if aqi is None or weather is None:
-                  print("❌ Data not available")
-                  return
+    pollutants = get_pollutants()
+    weather = get_weather()
+    forecast = get_forecast()
 
-              row = {
-                  "date": date_str,
-                  "time": time_str,
-                  "hour": hour,
-                  **aqi,
-                  **weather
-              }
+    if pollutants is None or weather is None:
+        print("❌ Data not available")
+        return
 
-              df = pd.DataFrame([row])
+    row = {
+        "date": date_str,
+        "time": time_str,
+        "hour_of_day": hour_of_day,
+        "day_of_week": day_of_week,
+        "is_weekend": is_weekend,
+        **pollutants,
+        **weather
+    }
 
-              if os.path.exists(csv_path):
-                  df.to_csv(csv_path, mode='a', header=False, index=False)
-              else:
-                  df.to_csv(csv_path, index=False)
+    df = pd.DataFrame([row])
+    if os.path.exists(csv_path):
+        df.to_csv(csv_path, mode='a', header=False, index=False)
+    else:
+        df.to_csv(csv_path, index=False)
 
-              
+    if not forecast.empty:
+        forecast.to_csv(forecast_path, index=False)
 
-          if __name__ == "__main__":
-              collect_one_hour()
-          EOF
+if __name__ == "__main__":
+    collect_one_hour()
+EOF
 
-      - name: 💾 Commit and Push Data
+      - name: 📂 Commit and Push Data
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           git config --global user.name "github-actions"
           git config --global user.email "actions@github.com"
+          git checkout ${{ github.ref_name }}
+          git remote set-url origin https://x-access-token:${GITHUB_TOKEN}@github.com/${{ github.repository }}
           git add data/
-          git commit -m "📊 Hourly AQI update - $(date -u)" || echo "No changes"
+          git commit -m "📊 Hourly AQI + Weather + Forecast update - $(date -u)" || echo "No changes to commit"
           git push
