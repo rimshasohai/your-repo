@@ -1,0 +1,64 @@
+name: ⛅ Forecast Logger
+
+on:
+  schedule:
+    - cron: '0 * * * *'  # Runs every hour
+  workflow_dispatch:
+
+jobs:
+  forecast-job:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: ✅ Checkout Repo
+        uses: actions/checkout@v4
+
+      - name: 🐍 Set up Python 3.10
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: 📦 Install Dependencies
+        run: pip install requests pandas
+
+      - name: 🧠 Generate forecast.csv
+        run: |
+          python -c "
+import requests, pandas as pd, datetime
+
+API_KEY = 'ee88310481e99a7843bdedc0cca27fd1'
+LAT, LON = 24.8607, 67.0011
+
+url = f'http://api.openweathermap.org/data/2.5/forecast?lat={LAT}&lon={LON}&appid={API_KEY}&units=metric'
+r = requests.get(url)
+data = r.json()
+
+rows = []
+for entry in data.get('list', [])[:24]:  # Only next 72 hours (3 days × 8 intervals)
+    dt = datetime.datetime.utcfromtimestamp(entry['dt'])
+    row = {
+        'timestamp': dt.strftime('%Y-%m-%d %H:%M:%S'),
+        'temp': entry['main']['temp'],
+        'humidity': entry['main']['humidity'],
+        'pressure': entry['main']['pressure'],
+        'wind_speed': entry['wind']['speed'],
+        'hour': dt.hour,
+        'dayofweek': dt.weekday(),
+        'is_weekend': 1 if dt.weekday() >= 5 else 0
+    }
+    rows.append(row)
+
+df = pd.DataFrame(rows)
+df.to_csv('forecast.csv', index=False)
+print('✅ forecast.csv generated')
+          "
+
+      - name: 📂 Commit and Push forecast.csv
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          git config --global user.name "github-actions"
+          git config --global user.email "actions@github.com"
+          git add forecast.csv
+          git commit -m "🌤️ Updated forecast.csv - $(date -u)" || echo "No changes"
+          git push
