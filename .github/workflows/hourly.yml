@@ -21,13 +21,14 @@ jobs:
       - name: 📦 Install Required Libraries
         run: pip install pandas requests
 
-      - name: 🚀 Run AQI Logger Inline
+      - name: 🚀 Run AQI Logger + Merger
         shell: python
         run: |
           import requests
           import pandas as pd
           import datetime
           import os
+          from glob import glob
 
           OPENWEATHER_KEY = "ee88310481e99a7843bdedc0cca27fd1"
           CITY = "Karachi"
@@ -128,7 +129,18 @@ jobs:
               else:
                   df.to_csv(csv_path, index=False)
 
+          def merge_all_csvs():
+              files = glob("data/*/karachi.csv")
+              if not files:
+                  print("No CSVs to merge.")
+                  return
+              all_data = pd.concat([pd.read_csv(f) for f in files], ignore_index=True)
+              os.makedirs("data1", exist_ok=True)
+              all_data.to_csv("data1/merged_karachi_aqi.csv", index=False)
+              print("✅ Merged CSV created at data1/merged_karachi_aqi.csv")
+
           collect_one_hour()
+          merge_all_csvs()
 
       - name: 📂 Commit and Push Data
         env:
@@ -137,7 +149,8 @@ jobs:
           git config --global user.name "github-actions"
           git config --global user.email "actions@github.com"
           git checkout ${{ github.ref_name }}
-          git add data/
-          git commit -m "📊 Hourly AQI + Weather + Forecast as Features - $(date -u)" || echo "No changes to commit"
+          git add data/ data1/
+          git commit -m "📊 Hourly AQI + Weather Logged + Merged CSV - $(date -u)" || echo "No changes to commit"
           git push
+
 
