@@ -21,128 +21,125 @@ jobs:
       - name: 📦 Install Required Libraries
         run: pip install pandas requests
 
-      - name: 🚀 Run AQI Logger + Merge CSVs
+      - name: 🚀 Log AQI and Merge CSVs Inline
         run: |
-          echo "Running AQI logging script..."
-          python <<EOF
-          import requests
-          import pandas as pd
-          import datetime
-          import os
-          from glob import glob
+          python -c "import requests
+import pandas as pd
+import datetime
+import os
+from glob import glob
 
-          OPENWEATHER_KEY = "ee88310481e99a7843bdedc0cca27fd1"
-          CITY = "Karachi"
-          COUNTRY = "PK"
-          LAT = 24.8607
-          LON = 67.0011
+OPENWEATHER_KEY = 'ee88310481e99a7843bdedc0cca27fd1'
+CITY = 'Karachi'
+COUNTRY = 'PK'
+LAT = 24.8607
+LON = 67.0011
 
-          def get_pollutants():
-              try:
-                  url = f"http://api.openweathermap.org/data/2.5/air_pollution?lat={LAT}&lon={LON}&appid={OPENWEATHER_KEY}"
-                  r = requests.get(url)
-                  r.raise_for_status()
-                  data = r.json()
-                  components = data["list"][0]["components"]
-                  aqi_index = data["list"][0]["main"]["aqi"]
-                  return {
-                      "aqi_index": aqi_index,
-                      "pm2_5": components.get("pm2_5"),
-                      "pm10": components.get("pm10"),
-                      "co": components.get("co"),
-                      "no2": components.get("no2"),
-                      "o3": components.get("o3"),
-                      "so2": components.get("so2"),
-                      "nh3": components.get("nh3")
-                  }
-              except Exception as e:
-                  print("Pollutants Error:", e)
-                  return None
+def get_pollutants():
+    try:
+        url = f'http://api.openweathermap.org/data/2.5/air_pollution?lat={LAT}&lon={LON}&appid={OPENWEATHER_KEY}'
+        r = requests.get(url)
+        r.raise_for_status()
+        data = r.json()
+        components = data['list'][0]['components']
+        aqi_index = data['list'][0]['main']['aqi']
+        return {
+            'aqi_index': aqi_index,
+            'pm2_5': components.get('pm2_5'),
+            'pm10': components.get('pm10'),
+            'co': components.get('co'),
+            'no2': components.get('no2'),
+            'o3': components.get('o3'),
+            'so2': components.get('so2'),
+            'nh3': components.get('nh3')
+        }
+    except Exception as e:
+        print('Pollutants Error:', e)
+        return None
 
-          def get_weather():
-              try:
-                  url = f"http://api.openweathermap.org/data/2.5/weather?q={CITY},{COUNTRY}&appid={OPENWEATHER_KEY}&units=metric"
-                  r = requests.get(url)
-                  r.raise_for_status()
-                  data = r.json()
-                  return {
-                      "temp": data["main"].get("temp"),
-                      "humidity": data["main"].get("humidity"),
-                      "pressure": data["main"].get("pressure"),
-                      "wind_speed": data["wind"].get("speed")
-                  }
-              except Exception as e:
-                  print("Weather Error:", e)
-                  return None
+def get_weather():
+    try:
+        url = f'http://api.openweathermap.org/data/2.5/weather?q={CITY},{COUNTRY}&appid={OPENWEATHER_KEY}&units=metric'
+        r = requests.get(url)
+        r.raise_for_status()
+        data = r.json()
+        return {
+            'temp': data['main'].get('temp'),
+            'humidity': data['main'].get('humidity'),
+            'pressure': data['main'].get('pressure'),
+            'wind_speed': data['wind'].get('speed')
+        }
+    except Exception as e:
+        print('Weather Error:', e)
+        return None
 
-          def get_forecast_features():
-              try:
-                  url = f"http://api.openweathermap.org/data/2.5/forecast?lat={LAT}&lon={LON}&appid={OPENWEATHER_KEY}&units=metric"
-                  r = requests.get(url)
-                  r.raise_for_status()
-                  data = r.json()
-                  forecasts = data.get("list", [])
-                  forecast_features = {}
-                  for i, entry in enumerate(forecasts[:24]):
-                      forecast_features[f"forecast_{i+1}_temp"] = entry["main"]["temp"]
-                      forecast_features[f"forecast_{i+1}_humidity"] = entry["main"]["humidity"]
-                      forecast_features[f"forecast_{i+1}_pressure"] = entry["main"]["pressure"]
-                      forecast_features[f"forecast_{i+1}_wind_speed"] = entry["wind"]["speed"]
-                  return forecast_features
-              except Exception as e:
-                  print("Forecast Error:", e)
-                  return {}
+def get_forecast_features():
+    try:
+        url = f'http://api.openweathermap.org/data/2.5/forecast?lat={LAT}&lon={LON}&appid={OPENWEATHER_KEY}&units=metric'
+        r = requests.get(url)
+        r.raise_for_status()
+        data = r.json()
+        forecasts = data.get('list', [])
+        forecast_features = {}
+        for i, entry in enumerate(forecasts[:24]):
+            forecast_features[f'forecast_{i+1}_temp'] = entry['main']['temp']
+            forecast_features[f'forecast_{i+1}_humidity'] = entry['main']['humidity']
+            forecast_features[f'forecast_{i+1}_pressure'] = entry['main']['pressure']
+            forecast_features[f'forecast_{i+1}_wind_speed'] = entry['wind']['speed']
+        return forecast_features
+    except Exception as e:
+        print('Forecast Error:', e)
+        return {}
 
-          def collect_one_hour():
-              now = datetime.datetime.utcnow()
-              date_str = now.strftime("%Y-%m-%d")
-              time_str = now.strftime("%H:%M:%S")
-              hour_of_day = now.hour
-              day_of_week = now.weekday()
-              is_weekend = 1 if day_of_week >= 5 else 0
+def collect_one_hour():
+    now = datetime.datetime.utcnow()
+    date_str = now.strftime('%Y-%m-%d')
+    time_str = now.strftime('%H:%M:%S')
+    hour_of_day = now.hour
+    day_of_week = now.weekday()
+    is_weekend = 1 if day_of_week >= 5 else 0
 
-              folder_path = f"data/{date_str}"
-              os.makedirs(folder_path, exist_ok=True)
-              csv_path = f"{folder_path}/karachi.csv"
+    folder_path = f'data/{date_str}'
+    os.makedirs(folder_path, exist_ok=True)
+    csv_path = f'{folder_path}/karachi.csv'
 
-              pollutants = get_pollutants()
-              weather = get_weather()
-              forecast_features = get_forecast_features()
+    pollutants = get_pollutants()
+    weather = get_weather()
+    forecast_features = get_forecast_features()
 
-              if pollutants is None or weather is None or not forecast_features:
-                  print("❌ Data not available")
-                  return
+    if pollutants is None or weather is None or not forecast_features:
+        print('❌ Data not available')
+        return
 
-              row = {
-                  "date": date_str,
-                  "time": time_str,
-                  "hour_of_day": hour_of_day,
-                  "day_of_week": day_of_week,
-                  "is_weekend": is_weekend,
-                  **pollutants,
-                  **weather,
-                  **forecast_features
-              }
+    row = {
+        'date': date_str,
+        'time': time_str,
+        'hour_of_day': hour_of_day,
+        'day_of_week': day_of_week,
+        'is_weekend': is_weekend,
+        **pollutants,
+        **weather,
+        **forecast_features
+    }
 
-              df = pd.DataFrame([row])
-              if os.path.exists(csv_path):
-                  df.to_csv(csv_path, mode='a', header=False, index=False)
-              else:
-                  df.to_csv(csv_path, index=False)
+    df = pd.DataFrame([row])
+    if os.path.exists(csv_path):
+        df.to_csv(csv_path, mode='a', header=False, index=False)
+    else:
+        df.to_csv(csv_path, index=False)
 
-          def merge_all_csvs():
-              files = glob("data/*/karachi.csv")
-              if not files:
-                  print("No CSVs to merge.")
-                  return
-              all_data = pd.concat([pd.read_csv(f) for f in files], ignore_index=True)
-              os.makedirs("data1", exist_ok=True)
-              all_data.to_csv("data1/merged_karachi_aqi.csv", index=False)
-              print("✅ Merged CSV created at data1/merged_karachi_aqi.csv")
+def merge_all_csvs():
+    files = glob('data/*/karachi.csv')
+    if not files:
+        print('No CSVs to merge.')
+        return
+    all_data = pd.concat([pd.read_csv(f) for f in files], ignore_index=True)
+    os.makedirs('data1', exist_ok=True)
+    all_data.to_csv('data1/merged_karachi_aqi.csv', index=False)
+    print('✅ Merged CSV saved to data1/merged_karachi_aqi.csv')
 
-          collect_one_hour()
-          merge_all_csvs()
-          EOF
+collect_one_hour()
+merge_all_csvs()"
 
       - name: 📂 Commit and Push Data
         env:
@@ -152,8 +149,7 @@ jobs:
           git config --global user.email "actions@github.com"
           git checkout ${{ github.ref_name }}
           git add data/ data1/
-          git commit -m "📊 Hourly AQI logged & merged - $(date -u)" || echo "No changes to commit"
+          git commit -m "📊 Hourly AQI logged and merged - $(date -u)" || echo "No changes to commit"
           git push
-
 
 
