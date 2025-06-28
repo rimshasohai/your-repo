@@ -21,9 +21,10 @@ jobs:
       - name: 📦 Install Required Libraries
         run: pip install pandas requests
 
-      - name: 🚀 Log AQI and Merge CSVs Inline
+      - name: 🚀 Run AQI Logger & Merge Data
         run: |
-          python -c "import requests
+          echo "
+import requests
 import pandas as pd
 import datetime
 import os
@@ -139,7 +140,9 @@ def merge_all_csvs():
     print('✅ Merged CSV saved to data1/merged_karachi_aqi.csv')
 
 collect_one_hour()
-merge_all_csvs()"
+merge_all_csvs()
+          " > aqi_logger.py
+          python aqi_logger.py
 
       - name: 📂 Commit and Push Data
         env:
